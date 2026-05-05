@@ -3,207 +3,157 @@ import pickle
 import requests
 import random
 
-# -----------------------------------
-# Page setup
-# -----------------------------------
-st.set_page_config(
-    page_title="CineMatch AI",
-    layout="wide"
-)
+st.set_page_config(page_title="Movie Recommender", layout="wide")
 
-# -----------------------------------
-# Load data
-# -----------------------------------
 movies = pickle.load(open("movies.pkl", "rb"))
 similarity = pickle.load(open("similarity.pkl", "rb"))
 
-movies["title"] = movies["title"].str.strip()
 movies["title_lower"] = movies["title"].str.lower()
 
-# -----------------------------------
-# TMDB API Key
-# -----------------------------------
 API_KEY = "b7f0fe7d1cc03a07a6bb95248bc105f8"
 
-# -----------------------------------
-# Session state
-# -----------------------------------
 if "favorites" not in st.session_state:
     st.session_state.favorites = []
 
-# -----------------------------------
-# Custom styling
-# -----------------------------------
+if "recommendations" not in st.session_state:
+    st.session_state.recommendations = []
+
 st.markdown("""
 <style>
-.main-title {
-    text-align:center;
-    font-size:50px;
-    font-weight:bold;
-    color:#ff4b4b;
+header {visibility:hidden;}
+#MainMenu {visibility:hidden;}
+footer {visibility:hidden;}
+
+.block-container {
+    padding-top:1rem;
 }
 
-.sub-title {
-    text-align:center;
-    color:gray;
-    font-size:18px;
+.stApp {
+    background:#0b0f19;
+    color:white;
+}
+
+.main-title{
+text-align:center;
+font-size:65px;
+font-weight:bold;
+color:#e50914;
+}
+
+.sub-title{
+text-align:center;
+font-size:22px;
+color:#ddd;
 }
 </style>
 """, unsafe_allow_html=True)
 
-# -----------------------------------
-# Fetch movie poster
-# -----------------------------------
-@st.cache_data
-def fetch_poster(movie_title):
-    try:
-        # Remove year if present
-        cleaned_title = movie_title.split("(")[0].strip()
 
+@st.cache_data
+def fetch_poster(title):
+    try:
         response = requests.get(
             "https://api.themoviedb.org/3/search/movie",
-            params={
-                "api_key": API_KEY,
-                "query": cleaned_title
-            },
+            params={"api_key": API_KEY, "query": title},
             timeout=10
         )
 
         data = response.json()
 
         if data.get("results"):
-            for movie in data["results"]:
-                poster_path = movie.get("poster_path")
+            poster = data["results"][0].get("poster_path")
 
-                if poster_path:
-                    return f"https://image.tmdb.org/t/p/w500{poster_path}"
-
-        return "https://via.placeholder.com/300x450?text=No+Poster"
+            if poster:
+                return f"https://image.tmdb.org/t/p/w500{poster}"
 
     except:
-        return "https://via.placeholder.com/300x450?text=Error"
+        pass
 
-# -----------------------------------
-# Recommendation function
-# -----------------------------------
-def recommend(movie_name):
-    movie_name = movie_name.lower()
+    return "https://via.placeholder.com/300x450?text=No+Poster"
 
-    if movie_name not in movies["title_lower"].values:
-        return []
 
-    index = movies[movies["title_lower"] == movie_name].index[0]
-    distances = similarity[index]
+def recommend(movie):
+    idx = movies[movies["title_lower"] == movie.lower()].index[0]
+    distances = similarity[idx]
 
-    recommended_movies = sorted(
+    movie_list = sorted(
         list(enumerate(distances)),
         reverse=True,
         key=lambda x: x[1]
     )[1:6]
 
-    results = []
+    result = []
 
-    for movie in recommended_movies:
-        title = movies.iloc[movie[0]].title
-        poster = fetch_poster(title)
-        results.append((title, poster))
+    for i in movie_list:
+        title = movies.iloc[i[0]].title
+        result.append((title, fetch_poster(title)))
 
-    return results
+    return result
 
-# -----------------------------------
-# Sidebar
-# -----------------------------------
+
 page = st.sidebar.radio(
     "Navigation",
     ["Home", "Recommend", "Explore", "Favorites"]
 )
 
-# -----------------------------------
-# Home Page
-# -----------------------------------
 if page == "Home":
-
-    st.markdown('<p class="main-title">🎬 CineMatch AI</p>', unsafe_allow_html=True)
-    st.markdown('<p class="sub-title">Find your next favorite movie</p>', unsafe_allow_html=True)
+    st.markdown('<p class="main-title">🎬 Movie Recommender</p>', unsafe_allow_html=True)
+    st.markdown('<p class="sub-title">Your AI Movie Partner</p>', unsafe_allow_html=True)
 
     st.image(
-        "https://images.unsplash.com/photo-1489599849927-2ee91cede3ba",
+        "https://images.unsplash.com/photo-1517604931442-7e0c8ed2963c",
         use_container_width=True
     )
 
-    st.markdown("## Features")
-    st.write("🎯 Smart Recommendations")
-    st.write("🖼 Live Posters")
-    st.write("❤️ Save Favorites")
-    st.write("🎲 Random Movie Generator")
+    c1, c2, c3 = st.columns(3)
 
-# -----------------------------------
-# Recommend Page
-# -----------------------------------
+    c1.metric("Movies", len(movies))
+    c2.metric("Favorites", len(st.session_state.favorites))
+    c3.metric("Recommendations", "Unlimited")
+
 elif page == "Recommend":
 
-    st.title("🎯 Movie Recommendations")
+    st.title("🎯 Find Similar Movies")
 
-    selected_movie = st.selectbox(
-        "Choose a movie",
-        movies["title"].values
-    )
+    selected = st.selectbox("Choose a movie", movies["title"])
 
     if st.button("Recommend"):
+        st.session_state.recommendations = recommend(selected)
 
-        recommendations = recommend(selected_movie)
+    if st.session_state.recommendations:
 
         cols = st.columns(5)
 
-        for i, (title, poster) in enumerate(recommendations):
-
+        for i, (title, poster) in enumerate(st.session_state.recommendations):
             with cols[i]:
                 st.image(poster)
-                st.write(f"**{title}**")
+                st.write(title)
 
-                if title in st.session_state.favorites:
-                    if st.button("❤️ Remove", key=f"remove{i}"):
-                        st.session_state.favorites.remove(title)
-                        st.rerun()
-                else:
-                    if st.button("🤍 Add", key=f"add{i}"):
+                if title not in st.session_state.favorites:
+                    if st.button("❤️ Add", key=i):
                         st.session_state.favorites.append(title)
                         st.rerun()
+                else:
+                    st.success("Added")
 
-    if st.button("🎲 Surprise Me"):
-        random_movie = random.choice(movies["title"].values)
-        st.success(f"Try watching: {random_movie}")
-
-# -----------------------------------
-# Explore Page
-# -----------------------------------
 elif page == "Explore":
+    st.title("🔍 Search Movies")
 
-    st.title("🔍 Explore Movies")
-
-    search = st.text_input("Search movie")
+    search = st.text_input("Search")
 
     if search:
-        result = movies[
-            movies["title"].str.contains(search, case=False, na=False)
-        ]
-        st.dataframe(result[["title"]].head(20))
-    else:
-        st.dataframe(movies[["title"]].head(20))
+        result = movies[movies["title"].str.contains(search, case=False)]
+        st.dataframe(result[["title"]])
 
-# -----------------------------------
-# Favorites Page
-# -----------------------------------
 elif page == "Favorites":
-
-    st.title("❤️ Favorite Movies")
+    st.title("❤️ Your Watchlist")
 
     if not st.session_state.favorites:
-        st.warning("No favorite movies yet")
+        st.warning("No favorites yet")
     else:
-        for movie in st.session_state.favorites:
-            st.write(f"🎬 {movie}")
+        cols = st.columns(3)
 
-        if st.button("Clear All"):
-            st.session_state.favorites = []
-            st.rerun()
+        for i, movie in enumerate(st.session_state.favorites):
+            with cols[i % 3]:
+                st.image(fetch_poster(movie))
+                st.write(movie)
