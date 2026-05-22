@@ -20,7 +20,6 @@ An intelligent Movie Recommendation System built using Machine Learning and Stre
 - Pickle
 - Requests
 - TMDB API
-- Git & GitHub
 
 ## ⚙️ How It Works
 
